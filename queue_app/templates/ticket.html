@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        @page { margin: 0; }
+        body { 
+            background-color: white; 
+            margin: 1cm;
+        }
+        .d-print-none { display: none !important; }
+        .ticket-box {
+            border: 2px solid black !important;
+            box-shadow: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-6 col-lg-4">
+        
+        <!-- Action Buttons (Hidden when printing) -->
+        <div class="d-flex justify-content-between mb-3 d-print-none">
+            <button onclick="window.print()" class="btn btn-dark btn-lg"><i class="bi bi-printer"></i> Print Ticket</button>
+            <a href="{% url 'kiosk' %}" class="btn btn-outline-secondary btn-lg">Done</a>
+        </div>
+
+        <!-- Printable Ticket Area -->
+        <div class="card ticket-box shadow-lg text-center p-4 rounded-0">
+            <h4 class="text-uppercase fw-bold mb-1">City Hospital</h4>
+            <p class="text-muted small mb-4">Queue Management System</p>
+            
+            <p class="mb-0 text-muted">Your Ticket Number</p>
+            <h1 class="display-1 fw-bold text-dark my-2">{{ ticket.ticket_number }}</h1>
+            
+            <hr class="my-4 border-dark">
+            
+            <div class="mb-3">
+                <p class="mb-0 text-muted small">Please proceed to:</p>
+                <h5 class="fw-bold mb-0">{{ department }}</h5>
+                <p class="text-muted small mb-1">{{ service }}</p>
+                {% if assigned_room %}
+                <div class="badge bg-success fs-6 my-1"><i class="bi bi-door-open"></i> Assigned Room: {{ assigned_room }}</div>
+                {% endif %}
+                {% if patient.mrn %}
+                <div class="badge bg-light text-dark border">Patient ID: {{ patient.mrn }}</div>
+                {% endif %}
+            </div>
+            
+            <div class="text-start bg-light p-3 rounded small">
+                <strong>Instructions:</strong>
+                <ul class="mb-0 ps-3 mt-1">
+                    <li>Please wait in the designated waiting area.</li>
+                    <li>Watch the screen for your ticket number.</li>
+                    <li>Keep this ticket until your service is complete.</li>
+                </ul>
+            </div>
+            
+            <div class="mt-4 pt-3 border-top small text-muted">
+                Issued: {{ ticket.issued_at|date:"M d, Y H:i" }}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Auto-print and TTS script for kiosks -->
+{% block extra_js %}
+<script>
+    window.onload = function() {
+        // Announce the ticket number to the patient
+        if ('speechSynthesis' in window) {
+            const ticketString = "{{ ticket.ticket_number }}".split('').join(' ');
+            const utterance = new SpeechSynthesisUtterance(`Your ticket number is ${ticketString}. Please proceed to {{ department }}.`);
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+        
+        // Uncomment to automatically open print dialog
+        // window.print();
+    }
+</script>
+{% endblock %}
+{% endblock %}

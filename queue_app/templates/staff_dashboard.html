@@ -1,0 +1,601 @@
+{% extends 'base.html' %}
+
+{% block title %}Doctor & Staff Consultation Dashboard - HMS{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+        <h2 class="mb-1 text-dark fw-bold">
+            <i class="bi bi-person-badge text-primary"></i> 
+            {{ department.name|default:"Station" }} Consultation Dashboard
+        </h2>
+        <div class="text-muted small">
+            Logged in as <strong>{{ request.user.username }}</strong> &bull; 
+            Room: 
+            {% if user_room %}
+                <span class="badge bg-success" id="my-room-badge"><i class="bi bi-door-open"></i> {{ user_room.name }}</span>
+            {% else %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No Room Assigned</span>
+            {% endif %}
+            &bull; Est. Queue Wait: <strong>~{{ est_wait }} mins</strong>
+            &bull; Consultations Done Today: <strong>{{ completed_today_count }}</strong>
+        </div>
+    </div>
+    <div class="col-md-6 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 align-items-center">
+        <!-- Room Selector Form -->
+        <form method="POST" action="{% url 'assign_room' %}" class="d-inline-flex gap-1 align-items-center">
+            {% csrf_token %}
+            <label class="small text-muted fw-bold d-none d-sm-inline">Room:</label>
+            <select name="room_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">-- Claim Room --</option>
+                {% for r in rooms %}
+                <option value="{{ r.id }}" {% if user_room.id == r.id %}selected{% endif %}>
+                    {{ r.name }} ({{ r.get_status_display }}{% if r.assigned_staff %} - {{ r.assigned_staff.username }}{% endif %})
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <!-- Department Switcher -->
+        <form method="GET" class="d-inline-flex">
+            <select name="department_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for d in all_departments %}
+                <option value="{{ d.id }}" {% if d.id == department.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Active Patient Management -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-person-check"></i> Current Active Patient in My Room</h5>
+                {% if active_stage %}
+                    <span class="badge {% if active_stage.status == 'ROOM_ASSIGNED' %}bg-info text-dark{% else %}bg-primary{% endif %} fs-6">
+                        {{ active_stage.get_status_display }} ({{ active_stage.get_assignment_mode_display }})
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card-body p-4">
+                {% if active_stage %}
+                    <div class="p-4 bg-light rounded-3 border mb-4">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-bold">Active Ticket</span>
+                                <h1 class="display-4 fw-bold text-primary mb-1">{{ active_stage.visit.ticket.ticket_number }}</h1>
+                                <div class="fs-5 fw-semibold text-dark">{{ active_stage.visit.patient.name }}</div>
+                                <div class="text-muted small">
+                                    MRN: {{ active_stage.visit.patient.mrn }} &bull; Service: <strong>{{ active_stage.service.name }}</strong>
+                                    {% if active_stage.assigned_at %}
+                                        &bull; Assigned: <strong>{{ active_stage.assigned_at|date:"H:i:s" }}</strong>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                {% if active_stage.priority == 2 %}
+                                    <span class="badge badge-emergency fs-6 px-3 py-2">EMERGENCY</span>
+                                {% elif active_stage.priority == 1 %}
+                                    <span class="badge bg-warning text-dark fs-6 px-3 py-2">URGENT</span>
+                                {% else %}
+                                    <span class="badge bg-secondary fs-6 px-3 py-2">Routine</span>
+                                {% endif %}
+                                <div class="text-muted small mt-2">Station: <strong>{{ active_stage.room.name|default:"Unassigned" }}</strong></div>
+                                {% if active_stage.consultation_started_at %}
+                                    <div class="text-success small fw-bold mt-1">In Consultation for {{ active_stage.consultation_started_at|timesince }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if active_stage.triage_notes %}
+                        <div class="p-3 bg-white rounded border mb-3 small">
+                            <strong class="text-danger"><i class="bi bi-heart-pulse"></i> Triage Assessment:</strong>
+                            <div>{{ active_stage.triage_notes }}</div>
+                            {% if active_stage.priority_reason %}
+                                <div class="text-muted mt-1"><em>Urgency reason: {{ active_stage.priority_reason }}</em></div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Workflow Action Buttons -->
+                        <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                            {% if active_stage.status == 'ROOM_ASSIGNED' or active_stage.status == 'CALLED' %}
+                                <form method="POST" action="{% url 'mark_arrived' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-info">
+                                        <i class="bi bi-geo-alt"></i> Mark Arrived
+                                    </button>
+                                </form>
+                                <form method="POST" action="{% url 'start_service' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-play-circle"></i> Start Consultation
+                                    </button>
+                                </form>
+                            {% elif active_stage.status == 'ARRIVED' %}
+                                <form method="POST" action="{% url 'start_service' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-success btn-lg">
+                                        <i class="bi bi-play-circle"></i> Start Consultation
+                                    </button>
+                                </form>
+                            {% elif active_stage.status == 'IN_SERVICE' %}
+                                <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#completeModal">
+                                    <i class="bi bi-check2-circle"></i> Complete Consultation
+                                </button>
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#redirectModal">
+                                    <i class="bi bi-arrow-right-circle"></i> Order Services / Transfer
+                                </button>
+                            {% endif %}
+
+                            <form method="POST" action="{% url 'recall_ticket' active_stage.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-warning">
+                                    <i class="bi bi-megaphone"></i> Recall (TV Screen)
+                                </button>
+                            </form>
+
+                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#holdModal">
+                                <i class="bi bi-pause-circle"></i> Put on Hold
+                            </button>
+
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#skipModal">
+                                <i class="bi bi-skip-forward"></i> Skip Patient
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Complete Consultation Modal -->
+                    <div class="modal fade" id="completeModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <form method="POST" action="{% url 'complete_consultation' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-header bg-success text-white">
+                                        <h5 class="modal-title"><i class="bi bi-check-circle"></i> Complete Consultation: {{ active_stage.visit.ticket.ticket_number }}</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Clinical Assessment, Diagnosis & Instructions</label>
+                                            <textarea name="clinical_notes" class="form-control" rows="3" placeholder="Enter clinical findings, diagnosis, prescriptions, or advice..."></textarea>
+                                        </div>
+
+                                        <!-- Optional Next Required Service in Completion -->
+                                        <div class="p-3 bg-light rounded border mb-3">
+                                            <h6 class="fw-bold mb-2"><i class="bi bi-arrow-right-circle text-primary"></i> Subsequent Service Routing (Optional)</h6>
+                                            <div class="row g-2">
+                                                <div class="col-md-6">
+                                                    <select name="next_department" class="form-select form-select-sm">
+                                                        <option value="">-- No Transfer (Final Station) --</option>
+                                                        {% for d in all_departments %}
+                                                        <option value="{{ d.id }}">{{ d.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <select name="next_service" class="form-select form-select-sm">
+                                                        <option value="">-- Select Destination Service --</option>
+                                                        {% for s in all_services %}
+                                                        <option value="{{ s.id }}">{{ s.name }} ({{ s.department.name }})</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-12 mt-2">
+                                                    <input type="text" name="transfer_reason" class="form-control form-control-sm" placeholder="Order details e.g. Full Hemogram, Dispense Antibiotics">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Room Turnover Status</label>
+                                                <select name="room_turnover" class="form-select">
+                                                    <option value="AVAILABLE" selected>Available Immediately (Auto-pull next patient)</option>
+                                                    <option value="AWAITING_CLEANING">Needs Cleaning / Sanitization Turnover</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6 d-flex align-items-end">
+                                                <div class="form-check p-3 bg-light rounded border w-100">
+                                                    <input class="form-check-input" type="checkbox" name="close_visit" value="1" id="closeVisitCheck">
+                                                    <label class="form-check-label fw-bold" for="closeVisitCheck">
+                                                        Discharge Patient (Complete Hospital Visit)
+                                                    </label>
+                                                    <div class="text-muted small">Only check if patient has completed all hospital services.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-success px-4">
+                                            <i class="bi bi-check-lg"></i> Finish & Save Consultation
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transfer / Order Services Modal -->
+                    <div class="modal fade" id="redirectModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <form method="POST" action="{% url 'redirect_patient' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-header bg-primary text-white">
+                                        <h5 class="modal-title"><i class="bi bi-arrow-right-circle"></i> Transfer / Order Services: {{ active_stage.visit.ticket.ticket_number }}</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Destination Department</label>
+                                                <select name="next_department" class="form-select" required>
+                                                    {% for d in all_departments %}
+                                                    <option value="{{ d.id }}">{{ d.name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Service Required</label>
+                                                <select name="next_service" class="form-select" required>
+                                                    {% for s in all_services %}
+                                                    <option value="{{ s.id }}">{{ s.name }} ({{ s.department.name }})</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Investigation / Order Details / Clinical Reason</label>
+                                            <input type="text" name="reason" class="form-control" placeholder="e.g. Complete Blood Count, Dispense Medication" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Clinical Summary for Receiving Station</label>
+                                            <textarea name="clinical_notes" class="form-control" rows="3" placeholder="Clinical notes, differential diagnosis, or specimen instructions..."></textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Current Room Turnover Status</label>
+                                            <select name="room_turnover" class="form-select">
+                                                <option value="AVAILABLE" selected>Available Immediately (Auto-pull next patient)</option>
+                                                <option value="AWAITING_CLEANING">Needs Cleaning / Turnover</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary px-4">
+                                            <i class="bi bi-send-check"></i> Transfer Patient to Station
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hold Modal -->
+                    <div class="modal fade" id="holdModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="POST" action="{% url 'place_on_hold' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-header bg-secondary text-white">
+                                        <h5 class="modal-title"><i class="bi bi-pause-circle"></i> Place Patient on Hold</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Reason for Hold</label>
+                                            <input type="text" name="reason" class="form-control" placeholder="e.g. Awaiting lab results, stepped out for billing" required>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="release_room" value="1" id="releaseRoomCheck">
+                                            <label class="form-check-label" for="releaseRoomCheck">
+                                                Release consultation room for other patients while on hold
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-dark">Confirm Hold</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Skip Modal -->
+                    <div class="modal fade" id="skipModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="POST" action="{% url 'skip_patient' active_stage.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-header bg-danger text-white">
+                                        <h5 class="modal-title"><i class="bi bi-skip-forward"></i> Skip Patient</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Reason for Skipping</label>
+                                            <input type="text" name="reason" class="form-control" placeholder="e.g. No answer after 3 public announcements" required>
+                                        </div>
+                                        <div class="text-muted small">Skipping frees the consultation room and marks the stage as missed.</div>
+                                    </div>
+                                    <div class="modal-footer bg-light">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-danger">Confirm Skip</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-person-x fs-1 text-muted d-block mb-3"></i>
+                        <h4 class="text-secondary fw-bold">No Active Patient in Your Room</h4>
+                        <p class="text-muted mb-4">The automated engine will assign eligible patients as they finish triage, or you can call the next patient manually.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Department Room Assignments Table -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-hospital text-primary"></i> Current Station Assignments in {{ department.name }}</h5>
+                <span class="badge bg-secondary">{{ department_assigned_stages.count }} Active</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ticket</th>
+                                <th>Patient / MRN</th>
+                                <th>Room</th>
+                                <th>Clinician</th>
+                                <th>Status</th>
+                                <th>Mode</th>
+                                <th>Assigned At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in department_assigned_stages %}
+                            <tr {% if s.id == active_stage.id %}class="table-primary"{% endif %}>
+                                <td><strong>{{ s.visit.ticket.ticket_number }}</strong></td>
+                                <td>
+                                    {{ s.visit.patient.name }}
+                                    <div class="text-muted small">{{ s.visit.patient.mrn }}</div>
+                                </td>
+                                <td><span class="badge bg-dark">{{ s.room.name }}</span></td>
+                                <td>{{ s.handled_by.username|default:"Unassigned" }}</td>
+                                <td>
+                                    <span class="badge {% if s.status == 'ROOM_ASSIGNED' %}bg-info text-dark{% else %}bg-primary{% endif %}">
+                                        {{ s.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if s.assignment_mode == 'AUTO' %}
+                                        <span class="badge bg-success">Automated</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Override</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">{{ s.assigned_at|date:"H:i:s" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3">No patients currently assigned to rooms in this department.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Held Patients Section -->
+        {% if held_stages %}
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-warning bg-opacity-10 py-3 border-bottom">
+                <h5 class="mb-0 text-warning-emphasis fw-bold"><i class="bi bi-pause-circle"></i> Patients On Hold ({{ held_stages.count }})</h5>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for h in held_stages %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center p-3">
+                        <div>
+                            <strong>{{ h.visit.ticket.ticket_number }}</strong> &bull; {{ h.visit.patient.name }}
+                            <div class="text-muted small">Reason: {{ h.hold_reason|default:"Pending" }}</div>
+                        </div>
+                        <form method="POST" action="{% url 'resume_hold' h.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-play-circle"></i> Resume to Queue
+                            </button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Waiting Queue & Room Management Sidebar -->
+    <div class="col-lg-4">
+        <!-- Call Next & Waiting Queue -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-list-ol text-primary"></i> Waiting Queue</h5>
+                <span class="badge bg-primary rounded-pill px-3 py-2">{{ waiting_stages.count }} Waiting</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="p-3 bg-light border-bottom d-flex gap-2">
+                    <form method="POST" action="{% url 'call_next' department.id %}" class="flex-grow-1">
+                        {% csrf_token %}
+                        {% if user_room %}
+                            <input type="hidden" name="room_id" value="{{ user_room.id }}">
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary w-100 shadow-sm" {% if not waiting_stages or active_stage %}disabled{% endif %}>
+                            <i class="bi bi-megaphone-fill"></i> Call Next
+                        </button>
+                    </form>
+                    <form method="POST" action="{% url 'trigger_auto_assign' department.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-dark" title="Run Automated Room Assignment Engine">
+                            <i class="bi bi-gear-wide-connected"></i> Auto-Assign
+                        </button>
+                    </form>
+                </div>
+
+                <ul class="list-group list-group-flush">
+                    {% for stage in waiting_stages %}
+                    <li class="list-group-item p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="fw-bold fs-5 text-primary">{{ stage.visit.ticket.ticket_number }}</div>
+                            <div>
+                                {% if stage.priority == 2 %}
+                                    <span class="badge bg-danger">Emergency</span>
+                                {% elif stage.priority == 1 %}
+                                    <span class="badge bg-warning text-dark">Urgent</span>
+                                {% else %}
+                                    <span class="badge bg-light text-secondary">Routine</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="text-dark small">{{ stage.visit.patient.name }} ({{ stage.visit.patient.mrn }})</div>
+                        <div class="text-muted small mb-2">{{ stage.service.name }} &bull; Wait: {{ stage.added_to_queue_at|timesince }}</div>
+                        
+                        <!-- Manual Override Trigger -->
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#manualAssignModal{{ stage.id }}">
+                            <i class="bi bi-door-open"></i> Manual Room Override
+                        </button>
+
+                        <!-- Manual Assignment Modal -->
+                        <div class="modal fade" id="manualAssignModal{{ stage.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{% url 'manual_room_assign' stage.id %}">
+                                        {% csrf_token %}
+                                        <div class="modal-header bg-dark text-white">
+                                            <h5 class="modal-title">Manual Room Override: {{ stage.visit.ticket.ticket_number }}</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-4 text-start">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Select Target Consultation Room</label>
+                                                <select name="room_id" class="form-select" required>
+                                                    {% for r in rooms %}
+                                                    <option value="{{ r.id }}" {% if r.status != 'AVAILABLE' %}disabled{% endif %}>
+                                                        {{ r.name }} ({{ r.get_status_display }}{% if r.assigned_staff %} - {{ r.assigned_staff.username }}{% endif %})
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Justification Reason for Override <span class="text-danger">*</span></label>
+                                                <input type="text" name="override_reason" class="form-control" placeholder="e.g. VIP patient, clinician specific request, specialized equipment" required>
+                                            </div>
+                                            <div class="text-muted small">All manual overrides are logged and audited with your user credentials.</div>
+                                        </div>
+                                        <div class="modal-footer bg-light">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Confirm Manual Assignment</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-4">
+                        Queue is currently empty.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Room Management & Turnover -->
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-dark text-white py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-door-closed"></i> Room Turnover Management</h5>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for room in rooms %}
+                    <li class="list-group-item p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div>
+                                <strong>{{ room.name }}</strong>
+                                {% if room.assigned_staff %}
+                                    <div class="text-muted small"><i class="bi bi-person"></i> {{ room.assigned_staff.username }}</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if room.status == 'AVAILABLE' %}
+                                    <span class="badge bg-success">Available</span>
+                                {% elif room.status == 'OCCUPIED' %}
+                                    <span class="badge bg-danger">Occupied</span>
+                                {% elif room.status == 'AWAITING_CLEANING' %}
+                                    <span class="badge bg-warning text-dark">Cleaning Required</span>
+                                {% elif room.status == 'RESERVED' %}
+                                    <span class="badge bg-info text-dark">Reserved</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ room.get_status_display }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <form method="POST" action="{% url 'update_room_status' room.id %}" class="d-flex gap-2">
+                            {% csrf_token %}
+                            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                                <option value="AVAILABLE" {% if room.status == 'AVAILABLE' %}selected{% endif %}>Mark Available (Auto-pulls next patient)</option>
+                                <option value="AWAITING_CLEANING" {% if room.status == 'AWAITING_CLEANING' %}selected{% endif %}>Needs Cleaning</option>
+                                <option value="UNAVAILABLE" {% if room.status == 'UNAVAILABLE' %}selected{% endif %}>Unavailable</option>
+                                <option value="OUT_OF_SERVICE" {% if room.status == 'OUT_OF_SERVICE' %}selected{% endif %}>Out of Service</option>
+                            </select>
+                        </form>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted p-3">No rooms configured in this department.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Real-Time WebSocket Listener for Staff Dashboard -->
+<script>
+    (function() {
+        const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socketUrl = wsProtocol + '://' + window.location.host + '/ws/dashboard/';
+        let dashSocket = null;
+
+        function connectDashboardWS() {
+            dashSocket = new WebSocket(socketUrl);
+
+            dashSocket.onmessage = function(e) {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'patient_assigned' || msg.type === 'consultation_completed' || msg.type === 'room_status_changed') {
+                    // Flash notification and automatically refresh dashboard data without manual reload
+                    console.log('Real-time event received:', msg);
+                    setTimeout(() => { window.location.reload(); }, 1200);
+                }
+            };
+
+            dashSocket.onclose = function() {
+                setTimeout(connectDashboardWS, 3000);
+            };
+        }
+
+        connectDashboardWS();
+    })();
+</script>
+{% endblock %}

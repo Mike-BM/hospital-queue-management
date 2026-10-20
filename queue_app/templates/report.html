@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Operational Analytics & Queue Performance Reports - HMS{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-7">
+        <h2 class="mb-1 text-dark fw-bold"><i class="bi bi-graph-up-arrow text-primary"></i> Operational Reports & Analytics</h2>
+        <p class="text-muted mb-0">Live hospital queue throughput, service bottlenecks, wait times, and room utilization.</p>
+    </div>
+    <div class="col-md-5 text-md-end mt-3 mt-md-0">
+        <div class="btn-group" role="group">
+            <a href="?days=1" class="btn btn-sm {% if days == 1 %}btn-primary{% else %}btn-outline-primary{% endif %}">Today</a>
+            <a href="?days=7" class="btn btn-sm {% if days == 7 %}btn-primary{% else %}btn-outline-primary{% endif %}">Past 7 Days</a>
+            <a href="?days=30" class="btn btn-sm {% if days == 30 %}btn-primary{% else %}btn-outline-primary{% endif %}">Past 30 Days</a>
+        </div>
+    </div>
+</div>
+
+<!-- Primary KPIs -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-primary border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Total Patient Visits</div>
+                <div class="fs-1 fw-bold text-dark mt-2">{{ total_visits }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-success border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Completed Services</div>
+                <div class="fs-1 fw-bold text-success mt-2">{{ total_completed }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-warning border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Currently Waiting</div>
+                <div class="fs-1 fw-bold text-warning mt-2">{{ total_waiting }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-info border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Avg Wait Time</div>
+                <div class="fs-1 fw-bold text-info mt-2">{{ avg_wait }} <span class="fs-6 text-muted">mins</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-secondary border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Median Wait Time</div>
+                <div class="fs-1 fw-bold text-secondary mt-2">{{ median_wait }} <span class="fs-6 text-muted">mins</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-xl-2">
+        <div class="card shadow-sm border-0 border-top border-danger border-4 bg-white h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-bold">Avg Consultation</div>
+                <div class="fs-1 fw-bold text-danger mt-2">{{ avg_consultation }} <span class="fs-6 text-muted">mins</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Department Breakdown -->
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-diagram-3 text-primary"></i> Department Throughput & Bottleneck Analysis</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Department</th>
+                                <th class="text-center">Total Registered</th>
+                                <th class="text-center">Waiting</th>
+                                <th class="text-center">In Service</th>
+                                <th class="text-center">Completed</th>
+                                <th class="text-center">Skipped</th>
+                                <th class="text-end">Avg Wait Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in dept_stats %}
+                            <tr>
+                                <td><strong>{{ d.department }}</strong></td>
+                                <td class="text-center"><span class="badge bg-light text-dark">{{ d.total }}</span></td>
+                                <td class="text-center"><span class="badge bg-warning text-dark">{{ d.waiting }}</span></td>
+                                <td class="text-center"><span class="badge bg-info text-dark">{{ d.in_service }}</span></td>
+                                <td class="text-center"><span class="badge bg-success">{{ d.completed }}</span></td>
+                                <td class="text-center"><span class="badge bg-danger">{{ d.skipped }}</span></td>
+                                <td class="text-end fw-bold text-primary">{{ d.avg_wait }} mins</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">No department metrics available for this period.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Utilization -->
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-door-open text-primary"></i> Room Utilization Status</h5>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for r in rooms %}
+                    <li class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ r.name }}</strong>
+                            <div class="text-muted small">{{ r.department.name }}</div>
+                            {% if r.assigned_staff %}
+                                <div class="text-primary small"><i class="bi bi-person"></i> {{ r.assigned_staff.username }}</div>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if r.status == 'AVAILABLE' %}
+                                <span class="badge bg-success">Available</span>
+                            {% elif r.status == 'OCCUPIED' %}
+                                <span class="badge bg-danger">Occupied</span>
+                            {% elif r.status == 'AWAITING_CLEANING' %}
+                                <span class="badge bg-warning text-dark">Cleaning</span>
+                            {% elif r.status == 'RESERVED' %}
+                                <span class="badge bg-info text-dark">Reserved</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ r.get_status_display }}</span>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted p-4">No rooms configured.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hospital Queue Management System{% endblock %}</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --hms-primary: #0d6efd;
+            --hms-dark: #1e293b;
+            --hms-bg: #f8fafc;
+        }
+        body {
+            background-color: var(--hms-bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #334155;
+        }
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .navbar-brand i {
+            color: #38bdf8;
+        }
+        .kiosk-btn {
+            height: 75px;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+        .card {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+        }
+        .badge-emergency {
+            background-color: #dc2626;
+            color: white;
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="d-flex flex-column min-vh-100">
+    {% block navbar %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm d-print-none">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'kiosk' %}">
+                <i class="bi bi-hospital fs-4"></i>
+                <span>Hospital Queue System</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'kiosk' %}active text-info fw-bold{% endif %}" href="{% url 'kiosk' %}">
+                            <i class="bi bi-ticket-perforated"></i> Patient Kiosk
+                        </a>
+                    </li>
+                    {% if user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'reception' %}active text-info fw-bold{% endif %}" href="{% url 'reception' %}">
+                            <i class="bi bi-person-lines-fill"></i> Reception Desk
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'triage' %}active text-info fw-bold{% endif %}" href="{% url 'triage' %}">
+                            <i class="bi bi-heart-pulse"></i> Triage Station
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'staff_dashboard' %}active text-info fw-bold{% endif %}" href="{% url 'staff_dashboard' %}">
+                            <i class="bi bi-person-badge"></i> Doctor / Station
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'reports' %}active text-info fw-bold{% endif %}" href="{% url 'reports' %}">
+                            <i class="bi bi-graph-up"></i> Reports & Analytics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-warning" href="{% url 'public_display' %}" target="_blank">
+                            <i class="bi bi-tv"></i> Public TV Display
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <div class="d-flex align-items-center gap-3">
+                    {% if user.is_authenticated %}
+                        <div class="text-light small text-end">
+                            <div><i class="bi bi-person-circle"></i> <strong>{{ user.username }}</strong></div>
+                            <div class="text-secondary small">{{ user.staff_profile.get_role_display|default:"Staff" }}</div>
+                        </div>
+                        <a href="{% url 'admin:index' %}" class="btn btn-outline-secondary btn-sm" title="System Administration">
+                            <i class="bi bi-gear"></i> Admin
+                        </a>
+                        <form method="POST" action="{% url 'logout' %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </button>
+                        </form>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-box-arrow-in-right"></i> Staff Login
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endblock %}
+
+    <main class="flex-grow-1 py-4">
+        <div class="container-fluid px-4">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show d-print-none shadow-sm" role="alert">
+                        {% if message.tags == 'error' or message.tags == 'danger' %}
+                            <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="footer bg-white border-top py-3 text-center text-muted small d-print-none mt-auto">
+        <div class="container">
+            <span>Hospital Management Queue Platform &copy; {% now "Y" %} &bull; Patient Care Flow Architecture</span>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

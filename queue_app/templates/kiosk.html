@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block navbar %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8 col-lg-6">
+        <div class="card shadow-lg border-0 rounded-4">
+            <div class="card-body p-5">
+                <h2 class="text-center mb-4 text-primary fw-bold">Welcome</h2>
+                <p class="text-center text-muted mb-4 fs-5">Please scan your ID or enter your Hospital Number to register for a service.</p>
+                
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        {{ form.name.label_tag }}
+                        {{ form.name }}
+                    </div>
+                    
+                    <div class="mb-4">
+                        {{ form.phone_number.label_tag }}
+                        {{ form.phone_number }}
+                    </div>
+                    
+                    <div class="mb-5">
+                        {{ form.service.label_tag }}
+                        {{ form.service }}
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary kiosk-btn rounded-pill shadow">Get Ticket</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,297 @@
+{% extends 'base.html' %}
+
+{% block title %}Reception Desk - Patient Registration & Queue Control{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-7">
+        <h2 class="mb-1 text-dark fw-bold"><i class="bi bi-person-lines-fill text-primary"></i> Reception Desk Portal</h2>
+        <p class="text-muted mb-0">Register patients, issue service tickets, and track today's patient visits with real-time room assignments.</p>
+    </div>
+    <div class="col-md-5 text-md-end mt-3 mt-md-0">
+        <a href="{% url 'kiosk' %}" target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-box-arrow-up-right"></i> Open Patient Kiosk
+        </a>
+    </div>
+</div>
+
+<!-- Operational Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-2">
+        <div class="card shadow-sm border-0 border-start border-primary border-4 bg-white">
+            <div class="card-body py-3">
+                <div class="text-muted small text-uppercase fw-bold">Waiting in Queue</div>
+                <div class="fs-2 fw-bold text-primary">{{ waiting_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card shadow-sm border-0 border-start border-info border-4 bg-white">
+            <div class="card-body py-3">
+                <div class="text-muted small text-uppercase fw-bold">Room Assigned</div>
+                <div class="fs-2 fw-bold text-info">{{ assigned_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="card shadow-sm border-0 border-start border-warning border-4 bg-white">
+            <div class="card-body py-3">
+                <div class="text-muted small text-uppercase fw-bold">Called / Arrived</div>
+                <div class="fs-2 fw-bold text-warning">{{ called_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 border-start border-secondary border-4 bg-white">
+            <div class="card-body py-3">
+                <div class="text-muted small text-uppercase fw-bold">In Service</div>
+                <div class="fs-2 fw-bold text-dark">{{ in_service_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card shadow-sm border-0 border-start border-success border-4 bg-white">
+            <div class="card-body py-3">
+                <div class="text-muted small text-uppercase fw-bold">Completed Today</div>
+                <div class="fs-2 fw-bold text-success">{{ completed_count }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Registration & Patient Lookup Form -->
+    <div class="col-lg-5 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-person-plus text-primary"></i> Patient Registration & Ticketing</h5>
+            </div>
+            <div class="card-body p-4">
+                
+                <!-- Instant Search for Existing Patients -->
+                <div class="mb-4 bg-light p-3 rounded border">
+                    <label class="form-label fw-bold small text-muted text-uppercase mb-1">
+                        <i class="bi bi-search"></i> Search Existing Patient (MRN / Phone / Name)
+                    </label>
+                    <form method="GET" class="d-flex gap-2">
+                        <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Search by name, phone or MRN...">
+                        <button type="submit" class="btn btn-dark btn-sm px-3">Search</button>
+                    </form>
+                    {% if search_results %}
+                        <div class="mt-2 list-group">
+                            {% for p in search_results %}
+                            <a href="?q={{ p.mrn }}" class="list-group-item list-group-item-action py-2 small d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ p.name }}</strong> &bull; <span class="text-primary">{{ p.mrn }}</span>
+                                    <div class="text-muted">{{ p.phone_number|default:"No phone" }}</div>
+                                </div>
+                                <span class="badge bg-primary">Select</span>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <form method="POST">
+                    {% csrf_token %}
+                    {{ form.existing_patient_id }}
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
+                            {{ form.name }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Phone Number</label>
+                            {{ form.phone_number }}
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Hospital ID / MRN</label>
+                            {{ form.mrn }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Date of Birth</label>
+                            {{ form.date_of_birth }}
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Gender</label>
+                            {{ form.gender }}
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                {{ form.is_appointment }}
+                                <label class="form-check-label fw-bold ms-1" for="{{ form.is_appointment.id_for_label }}">
+                                    Scheduled Appointment
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Initial Service Station <span class="text-danger">*</span></label>
+                        {{ form.service }}
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Queue Priority</label>
+                            {{ form.priority }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Priority Justification</label>
+                            {{ form.priority_reason }}
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100 shadow-sm">
+                        <i class="bi bi-printer"></i> Register & Issue Queue Ticket
+                    </button>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Today's Visits & Tickets List -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-list-check text-primary"></i> Today's Patient Visits</h5>
+                <form method="GET" class="d-flex gap-2">
+                    <select name="department_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Departments</option>
+                        {% for d in departments %}
+                        <option value="{{ d.id }}" {% if selected_dept_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ticket</th>
+                                <th>Patient / MRN</th>
+                                <th>Department & Room</th>
+                                <th>Clinician</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for visit in today_visits %}
+                            {% with current_stage=visit.stages.last %}
+                            <tr>
+                                <td>
+                                    <span class="fw-bold fs-5 text-primary">{{ visit.ticket.ticket_number }}</span>
+                                    {% if visit.is_appointment %}
+                                        <span class="badge bg-info text-dark d-block" style="font-size: 0.65rem;">Appt</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ visit.patient.name }}</strong>
+                                    <div class="text-muted small">MRN: {{ visit.patient.mrn }}</div>
+                                </td>
+                                <td>
+                                    {% if current_stage %}
+                                        <div><strong>{{ current_stage.department.name }}</strong></div>
+                                        {% if current_stage.room %}
+                                            <span class="badge bg-dark mt-1"><i class="bi bi-door-open"></i> {{ current_stage.room.name }}</span>
+                                        {% else %}
+                                            <span class="text-muted small">Waiting in Lobby</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">No active stage</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if current_stage and current_stage.handled_by %}
+                                        <span class="small fw-semibold"><i class="bi bi-person"></i> {{ current_stage.handled_by.username }}</span>
+                                    {% else %}
+                                        <span class="text-muted small">--</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if current_stage %}
+                                        {% if current_stage.status == 'WAITING' %}
+                                            <span class="badge bg-secondary">Waiting</span>
+                                        {% elif current_stage.status == 'ROOM_ASSIGNED' %}
+                                            <span class="badge bg-info text-dark">Room Assigned</span>
+                                        {% elif current_stage.status == 'CALLED' %}
+                                            <span class="badge bg-warning text-dark">Called</span>
+                                        {% elif current_stage.status == 'ARRIVED' %}
+                                            <span class="badge bg-primary">Arrived</span>
+                                        {% elif current_stage.status == 'IN_SERVICE' %}
+                                            <span class="badge bg-success">In Service</span>
+                                        {% elif current_stage.status == 'ON_HOLD' %}
+                                            <span class="badge bg-warning">On Hold</span>
+                                        {% elif current_stage.status == 'COMPLETED' %}
+                                            <span class="badge bg-light text-dark border">Completed</span>
+                                        {% elif current_stage.status == 'SKIPPED' %}
+                                            <span class="badge bg-danger">Skipped</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ current_stage.get_status_display }}</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'print_ticket' visit.ticket.id %}" target="_blank" class="btn btn-outline-dark btn-sm" title="Reprint Ticket">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-5">
+                                    No patient visits registered today yet.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Real-Time WebSocket Listener for Reception Desk -->
+<script>
+    (function() {
+        const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const socketUrl = wsProtocol + '://' + window.location.host + '/ws/dashboard/';
+        let dashSocket = null;
+
+        function connectDashboardWS() {
+            dashSocket = new WebSocket(socketUrl);
+
+            dashSocket.onmessage = function(e) {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'patient_assigned' || msg.type === 'consultation_completed' || msg.type === 'room_status_changed') {
+                    // Update reception table in real-time
+                    console.log('Reception WebSocket event:', msg);
+                    setTimeout(() => { window.location.reload(); }, 1200);
+                }
+            };
+
+            dashSocket.onclose = function() {
+                setTimeout(connectDashboardWS, 3000);
+            };
+        }
+
+        connectDashboardWS();
+    })();
+</script>
+{% endblock %}
